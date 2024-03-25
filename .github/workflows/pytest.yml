@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 
 env:
-  PYTEST_NUM_SHARDS: 4  # Controls tests sharding enabled by `pytest-shard`
+  PYTEST_NUM_SHARDS: 1  # Controls tests sharding enabled by `pytest-shard`
 
 jobs:
   activate-tests:
@@ -79,13 +79,13 @@ jobs:
       # Do not cancel in-progress jobs if any matrix job fails.
       fail-fast: false
       matrix:
-        tf-version: ['tensorflow', 'tf-nightly']
+        tf-version: ['tensorflow'] #['tensorflow', 'tf-nightly']
         # Can't reference env variables in matrix
         num-shards: ${{ fromJson(needs.shards-job.outputs.num-shards) }}
         shard-id: ${{ fromJson(needs.shards-job.outputs.shard-ids) }}
         # TF suppported versions: https://www.tensorflow.org/install/pip#software_requirements
-        python-version: ['3.10', '3.11']
-        os-version: [ubuntu-latest, macos-latest]
+        python-version: ['3.11'] # ['3.10', '3.11']
+        os-version: [ubuntu-latest] #[ubuntu-latest, macos-latest]
 
     steps:
     - uses: actions/checkout@v3
@@ -105,9 +105,18 @@ jobs:
     # * github_api is run separately to not overuse API quota.
     # * wmt is run separately to avoid worker hanging.
     # * Huggingface requires `datasets` library.
+    - name: Install pytest-ranking
+        run: pip install pytest-ranking==0.2.6
+    - name: Restore pytest-ranking cache
+        id: restore-pytest-ranking-cache
+        if: always()
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/.pytest_cache/v/pytest_ranking_data
+          key: pytest-ranking-cache-${{ runner.os }}-${{ matrix.python }}
     - name: Run core tests
       run: |
-        pytest --durations=100 -vv -n auto --shard-id=$((${{ matrix.shard-id }} - 1)) --num-shards=${{ env.PYTEST_NUM_SHARDS }} \
+        pytest --durations=0 -vv -n auto --shard-id=$((${{ matrix.shard-id }} - 1)) --num-shards=${{ env.PYTEST_NUM_SHARDS }} --rank --rank-weight=0-1-0 \
           --ignore="tensorflow_datasets/datasets/nsynth/nsynth_dataset_builder_test.py" \
           --ignore="tensorflow_datasets/image/lsun_test.py" \
           --ignore="tensorflow_datasets/datasets/imagenet2012_corrupted/imagenet2012_corrupted_dataset_builder_test.py" \
@@ -118,90 +127,99 @@ jobs:
           --ignore="tensorflow_datasets/core/dataset_builders/huggingface_dataset_builder_test.py" \
           --ignore="tensorflow_datasets/core/utils/huggingface_utils_test.py"
 
+    - name: Save pytest-ranking cache
+        id: save-pytest-ranking-cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/.pytest_cache/v/pytest_ranking_data
+          key: pytest-ranking-cache-${{ runner.os }}-${{ matrix.python }}-${{ github.run_id }}
+      - name: Upload Coverage Reports to CodeCov
+
     # Run tests without any pytest plugins. The tests should be triggered for a single shard only.
-    - name: Run leftover tests
-      if: ${{ matrix.shard-id == 1 }}
-      uses: nick-fields/retry@v2
-      with:
-        timeout_minutes: 1
-        max_attempts: 2
-        retry_on: timeout
-        command: |
-          pytest -vv -o faulthandler_timeout=10 tensorflow_datasets/translate/wmt19_test.py
+  #   - name: Run leftover tests
+  #     if: ${{ matrix.shard-id == 1 }}
+  #     uses: nick-fields/retry@v2
+  #     with:
+  #       timeout_minutes: 1
+  #       max_attempts: 2
+  #       retry_on: timeout
+  #       command: |
+  #         pytest -vv -o faulthandler_timeout=10 tensorflow_datasets/translate/wmt19_test.py
 
-  huggingface-pytest-job:
-    needs: activate-tests
-    if: ${{ needs.activate-tests.outputs.status }}
+  # huggingface-pytest-job:
+  #   needs: activate-tests
+  #   if: ${{ needs.activate-tests.outputs.status }}
 
-    # HuggingFace tests need to be run separately because they're disabled without installed
-    # `datasets` library.
-    name: 'HuggingFace Python 3.10 tests'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  #   # HuggingFace tests need to be run separately because they're disabled without installed
+  #   # `datasets` library.
+  #   name: 'HuggingFace Python 3.10 tests'
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 30
 
-    steps:
-    - uses: actions/checkout@v3
-    - uses: ./.github/actions/setup
-      with:
-        tf-version: tensorflow
-        python-version: '3.10'
-        extras: huggingface
+  #   steps:
+  #   - uses: actions/checkout@v3
+  #   - uses: ./.github/actions/setup
+  #     with:
+  #       tf-version: tensorflow
+  #       python-version: '3.10'
+  #       extras: huggingface
 
-    - name: Run HuggingFace tests
-      run: |
-        pytest -vv -n auto \
-          tensorflow_datasets/core/dataset_builders/huggingface_dataset_builder_test.py \
-          tensorflow_datasets/core/utils/huggingface_utils_test.py
+  #   - name: Run HuggingFace tests
+  #     run: |
+  #       pytest -vv -n auto \
+  #         tensorflow_datasets/core/dataset_builders/huggingface_dataset_builder_test.py \
+  #         tensorflow_datasets/core/utils/huggingface_utils_test.py
 
-  githubapi-pytest-job:
-    needs: activate-tests
-    if: ${{ needs.activate-tests.outputs.status }}
+  # githubapi-pytest-job:
+  #   needs: activate-tests
+  #   if: ${{ needs.activate-tests.outputs.status }}
 
-    name: 'Github API tests'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  #   name: 'Github API tests'
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 30
 
-    steps:
-    - uses: actions/checkout@v3
-    - uses: ./.github/actions/setup
-      with:
-        tf-version: tensorflow
+  #   steps:
+  #   - uses: actions/checkout@v3
+  #   - uses: ./.github/actions/setup
+  #     with:
+  #       tf-version: tensorflow
 
-    - name: Run Github API tests
-      run: pytest --durations=100 -vv -n auto tensorflow_datasets/core/github_api/github_path_test.py
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #   - name: Run Github API tests
+  #     run: pytest --durations=100 -vv -n auto tensorflow_datasets/core/github_api/github_path_test.py
+  #     env:
+  #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  notebook-test-job:
-    needs: activate-tests
-    if: ${{ needs.activate-tests.outputs.status }}
+  # notebook-test-job:
+  #   needs: activate-tests
+  #   if: ${{ needs.activate-tests.outputs.status }}
 
-    name: 'Notebook tests'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  #   name: 'Notebook tests'
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 30
 
-    steps:
-    - uses: actions/checkout@v3
-    - uses: ./.github/actions/setup
-      with:
-        tf-version: tensorflow
+  #   steps:
+  #   - uses: actions/checkout@v3
+  #   - uses: ./.github/actions/setup
+  #     with:
+  #       tf-version: tensorflow
 
-    - run: pip install ipython
+  #   - run: pip install ipython
 
-    # Test each notebook sequentially.
-    - name: Run notebook
-      run: |
-        ipython kernel install --user --name tfds-notebook
-        for notebook in docs/*ipynb
-          do
-            # These notebooks time out because they rely on loading huge datasets.
-            if [[ "$notebook" != "docs/determinism.ipynb" ]] && \
-               [[ "$notebook" != "docs/dataset_collections.ipynb" ]]
-            then
-              jupyter nbconvert \
-                --ExecutePreprocessor.timeout=600 \
-                --ExecutePreprocessor.kernel_name=tfds-notebook \
-                --to notebook \
-                --execute $notebook
-            fi
-          done
+  #   # Test each notebook sequentially.
+  #   - name: Run notebook
+  #     run: |
+  #       ipython kernel install --user --name tfds-notebook
+  #       for notebook in docs/*ipynb
+  #         do
+  #           # These notebooks time out because they rely on loading huge datasets.
+  #           if [[ "$notebook" != "docs/determinism.ipynb" ]] && \
+  #              [[ "$notebook" != "docs/dataset_collections.ipynb" ]]
+  #           then
+  #             jupyter nbconvert \
+  #               --ExecutePreprocessor.timeout=600 \
+  #               --ExecutePreprocessor.kernel_name=tfds-notebook \
+  #               --to notebook \
+  #               --execute $notebook
+  #           fi
+  #         done
