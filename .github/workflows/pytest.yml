@@ -10,8 +10,8 @@ on:
       - 'docs/**'
       - '*.md'
   push:
-    branches:
-      - master
+    # branches:
+    #   - master
     # Do not trigger tests for documentation or markdown docs.
     paths-ignore:
       - 'docs/**'
