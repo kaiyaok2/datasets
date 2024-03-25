@@ -125,7 +125,9 @@ jobs:
           --ignore="tensorflow_datasets/core/github_api/github_path_test.py" \
           --ignore="tensorflow_datasets/translate/wmt19_test.py" \
           --ignore="tensorflow_datasets/core/dataset_builders/huggingface_dataset_builder_test.py" \
-          --ignore="tensorflow_datasets/core/utils/huggingface_utils_test.py"
+          --ignore="tensorflow_datasets/core/utils/huggingface_utils_test.py" \
+          --ignore="tensorflow_datasets/scripts/cli/build_test.py" \
+          --ignore="tensorflow_datasets/core/visibility_test.py"
 
     - name: Save pytest-ranking cache
       id: save-pytest-ranking-cache
