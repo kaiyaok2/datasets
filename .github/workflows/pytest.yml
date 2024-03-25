@@ -1,9 +1,6 @@
 name: Unittests
 
 on:
-  push:
-    branches:
-      - 'master'
   workflow_dispatch:
   pull_request:
     branches:
@@ -12,13 +9,13 @@ on:
     paths-ignore:
       - 'docs/**'
       - '*.md'
-  # push:
-  #   branches:
-  #     - master
-  #   # Do not trigger tests for documentation or markdown docs.
-  #   paths-ignore:
-  #     - 'docs/**'
-  #     - '*.md'
+  push:
+    branches:
+      - master
+    # Do not trigger tests for documentation or markdown docs.
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   schedule:
     # Trigger tests every day at 02:00 UTC to refresh cache.
     - cron: '0 2 * * *'
@@ -109,14 +106,14 @@ jobs:
     # * wmt is run separately to avoid worker hanging.
     # * Huggingface requires `datasets` library.
     - name: Install pytest-ranking
-        run: pip install pytest-ranking==0.2.6
+      run: pip install pytest-ranking==0.2.6
     - name: Restore pytest-ranking cache
-        id: restore-pytest-ranking-cache
-        if: always()
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ github.workspace }}/.pytest_cache/v/pytest_ranking_data
-          key: pytest-ranking-cache-${{ runner.os }}-${{ matrix.python }}
+      id: restore-pytest-ranking-cache
+      if: always()
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ github.workspace }}/.pytest_cache/v/pytest_ranking_data
+        key: pytest-ranking-cache-${{ runner.os }}-${{ matrix.python }}
     - name: Run core tests
       run: |
         pytest --durations=0 -vv -n auto --shard-id=$((${{ matrix.shard-id }} - 1)) --num-shards=${{ env.PYTEST_NUM_SHARDS }} --rank --rank-weight=0-1-0 \
@@ -131,13 +128,13 @@ jobs:
           --ignore="tensorflow_datasets/core/utils/huggingface_utils_test.py"
 
     - name: Save pytest-ranking cache
-        id: save-pytest-ranking-cache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ github.workspace }}/.pytest_cache/v/pytest_ranking_data
-          key: pytest-ranking-cache-${{ runner.os }}-${{ matrix.python }}-${{ github.run_id }}
-      - name: Upload Coverage Reports to CodeCov
+      id: save-pytest-ranking-cache
+      if: always()
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ github.workspace }}/.pytest_cache/v/pytest_ranking_data
+        key: pytest-ranking-cache-${{ runner.os }}-${{ matrix.python }}-${{ github.run_id }}
+    # - name: Upload Coverage Reports to CodeCov
 
     # Run tests without any pytest plugins. The tests should be triggered for a single shard only.
   #   - name: Run leftover tests
